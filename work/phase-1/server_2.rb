@@ -21,8 +21,9 @@ loop do
     if con == socket
       cons.push(con.accept)
     else
-      line = con.gets
-      method, path = line.split
+      line             = con.gets
+      method, fullpath = line.split
+      path, query      = fullpath.split('?', 2)
 
       while line = con.gets
         break if line == "\r\n"
@@ -34,6 +35,10 @@ loop do
           con.write response('200 OK', '<h1>Hello World</h1>')
         when '/about'
           con.write response('200 OK', '<h1>About Page</h1>')
+        when '/hello'
+          params = query ? query.split('&').map { it.split('=') }.to_h : {}
+
+          con.write response('200 OK', "Hello #{params['name']}")
         else
           con.write response('404 Not Found', '<h1>404 Not Found</h1>')
         end
