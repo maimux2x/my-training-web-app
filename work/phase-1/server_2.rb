@@ -4,7 +4,7 @@ def response(status, body)
   <<~RESP.chomp.gsub("\n", "\r\n")
     HTTP/1.1 #{status}
     Content-Type: text/html
-    Content-Length: #{body.bytesize}
+    Content-Length: #{body.gsub("\n", "\r\n").bytesize}
     Connection: close
 
     #{body}
@@ -32,7 +32,7 @@ loop do
       if method == 'GET'
         case path
         when '/'
-          con.write response('200 OK', '<h1>Hello World</h1>')
+          con.write response('200 OK', File.read('./public/index.html'))
         when '/about'
           con.write response('200 OK', '<h1>About Page</h1>')
         when '/hello'
