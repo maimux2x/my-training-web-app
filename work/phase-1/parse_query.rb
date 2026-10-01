@@ -1,13 +1,15 @@
 def parse_query(path)
   _, query = path.split('?', 2)
 
-  query ? query.split('&').map {|str|
+  return {} unless query
+
+  query.split('&').map {|str|
     if str.end_with?('=')
-      [str.delete('='), '']
+      [str.delete_suffix('='), '']
     else
-      str.split('=').values_at(0..1)
+      str.split('=', 2).values_at(0..1)
     end
-  }.to_h : {}
+  }.to_h
 end
 
 p parse_query('/?foo=bar')
