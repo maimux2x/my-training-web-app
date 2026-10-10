@@ -22,57 +22,31 @@
 
 #### 1. TCP接続の受け付け
 
-- クライアント側で `WEBrick::HTTPServer.new` でサーバーオブジェクトを作成する
-- クライアント側で `WEBrick::HTTPserver#mount_proc` メソッドを使用してエンドポイントをマウントできる
-- `WEBrick::GenericServer#start` メソッドがクライアント側で呼ばれる
 - `WEBrick::GenericServer#start` メソッド内で `accept_client(svr)` が実行され、クライアントソケットが作成される
 
 #### 2. リクエストの読み込み
 
 - `WEBrick::GenericServer#start` メソッド内で `start_thread(sock, &block)` が実行される
-- エンドポイントがマウントされていない場合は`start_thread` メソッド内(`lib/webrick/server.rb:309`)で`WEBrick::HTTPserver#run` メソッドが実行される
+- `start_thread` メソッド内(`lib/webrick/server.rb:309`)で`WEBrick::HTTPserver#run` メソッドが実行される
+- `WEBrick::HTTPserver#run` メソッド内で `HTTPRequest` オブジェクトに対して、`HTTPRequest#parse` メソッドが実行され、リクエストヘッダーの解析が行われる
 
 #### 3. リクエストオブジェクトの生成
 
-- `WEBrick::HTTPserver#run` メソッド内で `HTTPserver#create_request` メソッドが呼ばれ、ポートやアドレスの情報を引数にして `HTTPRequest` オブジェクトが作成される
-- `WEBrick::HTTPserver#run` メソッド内で `HTTPRequest` オブジェクトに対して、`HTTPRequest#parse` メソッドが実行され、リクエストヘッダーの解析が行われる
+- `WEBrick::HTTPserver#run` メソッド内で `HTTPserver#create_request` メソッドが呼ばれ、`HTTPRequest` オブジェクトが作成される
 
 #### 4. ハンドラ（mount_proc）の呼び出し
 
-- `WEBrick::GenericServer#start` メソッド内で `start_thread(sock, &block)` が実行される
-- エンドポイントがマウントされている場合は`start_thread` メソッド内(`lib/webrick/server.rb:309`)でブロックを実行する
+- `HTTPserver#service` メソッド内
 
 #### 5. レスポンスの生成
 
-- エンドポイントがマウントされていない場合にレスポンスの生成処理が行われる
-- `WEBrick::HTTPserver#run` メソッド内で `HTTPserver#create_response` メソッドが呼ばれ、ポートやアドレスの情報を引数にして `HTTPResponse` オブジェクトが作成される
-- リクエストヘッダーの内容を元に `HTTPResponse` オブジェクトに書き込みが行われる
-
-- エンドポイントがマウントされている場合はブロック内の処理に従う
+- `WEBrick::HTTPserver#run` メソッド内で `HTTPserver#create_response` メソッドが呼ばれ、`HTTPResponse` オブジェクトが作成される
 
 #### 6. クライアントへの返却
 
 - `lib/webrick/httpserver.rb:112` で `HTTPResponse#send_response` メソッドが実行される
 - `HTTPResponse#send_response` では レスポンスヘッダーの返却とレスポンスボディの返却が行われている
 
-```mermaid
-sequenceDiagram
-    Client->>Server: WEBrick::HTTPServer＃new
-    Note over Client,Server:サーバーオブジェクトの生成
-    Client->>Server: WEBrick::HTTPserver＃mount_proc
-    Note over Client, Server: エンドポイントをマウント
-    Client->>Server: WEBrick::GenericSever＃start
-    Server->>Server: accept_client(svr)
-    Note over Server:クライアントソケットの作成
-    Server->>Server: start_thread(sock, &block)
-    Note over Server: ハンドラの呼び出し（マウントされている場合）
-    Server->>Client: ブロックの内容に従って処理が実行される
-    Note over Server: エンドポイントがマウントされていない場合、WEBrick::HTTPserver＃runを実行
-    Server->>Server: create_request(@config), create_response(@config)
-    Server->>Server: res.request_method, res.request_uri...レスポンスの生成
-    Server->>Client: HTTPResonse＃send_response
-    Note over Server, Client: レスポンスをクライアントへ返却
-```
 
 ### STEP4
 #### HTTPServer クラス
