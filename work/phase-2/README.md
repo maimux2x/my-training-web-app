@@ -47,6 +47,26 @@
 - `lib/webrick/httpserver.rb:112` で `HTTPResponse#send_response` メソッドが実行される
 - `HTTPResponse#send_response` では レスポンスヘッダーの返却とレスポンスボディの返却が行われている
 
+```mermaid
+sequenceDiagram                                                        
+  Client->>GenericSever: HTTPserver.new
+  GenericSever->>GenericSever:listenメソッド                                                                                                                                   
+  GenericSever->>GenericSever: startメソッド                                                             
+  
+  loop                                                   
+    GenericSever->>GenericSever: accept_clientメソッド                                                                                                                     
+    GenericSever->>GenericSever: start_thereadメソッド                                                                                      
+    GenericSever->>HTTPserver: run メソッド     
+    loop                                                           
+        HTTPserver->>HTTPrequest: parseメソッド                                                                                                                                                                 
+        HTTPserver->>HTTPserver: create_request メソッド                                                                                                                      
+        HTTPserver->>HTTPserver: service メソッド                                                                                                                                                                                                                       
+        HTTPserver->>HTTPserver: create_response メソッド                                                                                                                
+        HTTPserver->>HTTPResponse: send_response メソッド
+        HTTPResponse->>Client: レスポンス     
+    end            
+end
+```
 
 ### STEP4
 #### HTTPServer クラス
