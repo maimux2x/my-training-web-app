@@ -7,7 +7,7 @@ File.foreach path do |line|
 
   result.shift if result.length >= limit
 
-  result << line.lines
+  result << line
 end
 
 puts result
