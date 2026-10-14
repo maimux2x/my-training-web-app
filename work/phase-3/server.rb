@@ -36,8 +36,10 @@ end
 app = Proc.new do |env|
   if env['REQUEST_METHOD'] == 'GET'
     case env['PATH_INFO']
-    when '/hello'
-      [200, { 'content-type' => 'text/html' }, ['<h1>Hello, World</h1>']]
+    when '/'
+      [200, { 'content-type' => 'text/html' }, ['<h1>New App</h1>']]
+    when '/about'
+      [200, { 'content-type' => 'text/html' }, ['<h1>About Page</h1>']]
     else
       [404, { 'content-type' => 'text/html' }, ['<h1>Not Found</h1>']]
     end
@@ -53,7 +55,7 @@ Socket.tcp_server_loop '127.0.0.1', 3000 do |con|
     "#{k}: #{v}"
   }.join("\n")
 
-  res_body = body.join("\n")
+  res_body = body.join
 
   con.write <<~RESP.chomp.gsub("\n", "\r\n")
     HTTP/1.1 #{status} 

@@ -134,7 +134,7 @@ Socket.tcp_server_loop '127.0.0.1', 3000 do |con|
     "#{k}: #{v}"
   }.join("\n")
 
-  res_body = body.join("\n")
+  res_body = body.join
 
   con.write <<~RESP.chomp.gsub("\n", "\r\n")
     HTTP/1.1 #{status} 
@@ -208,7 +208,7 @@ Socket.tcp_server_loop '127.0.0.1', 3000 do |con|
     "#{k}: #{v}"
   }.join("\n")
 
-  res_body = body.join("\n")
+  res_body = body.join
 
   con.write <<~RESP.chomp.gsub("\n", "\r\n")
     HTTP/1.1 #{status} 
