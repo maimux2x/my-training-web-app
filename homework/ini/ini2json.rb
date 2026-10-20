@@ -1,23 +1,19 @@
 require 'json'
 
 result  = {}
+section = nil
 
 File.foreach ARGV.first, chomp: true do |line|
   next if line.empty? || line.start_with?(';')
 
   if line.start_with?('[') && line.end_with?(']')
-    key         = line.slice(1..-2)
-    result[key] = {}
+    section = line.slice(1..-2)
+
+    result[section] ||= {}
   else
-    key, value = line.split('=', 2).map(&:strip)
+    key, value = line.split('=', 2).each(&:strip)
 
-    last_value = result.values.last
-
-    if last_value.instance_of?(Hash)
-      last_value[key] = value
-    else
-      result[key] = value
-    end
+    (section ? result[section] : result)[key] = value
   end
 end
 
