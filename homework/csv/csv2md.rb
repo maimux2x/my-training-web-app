@@ -1,17 +1,20 @@
 require 'csv'
 
-csv       = ARGV.first
-max_group = CSV.read(csv).transpose.map { it.map(&:length).max }
+csv    = CSV.read(ARGV.first)
+widths = csv.transpose.map { it.map(&:length).max }
 
-hyphen = max_group.map {|i|
-  '-' * (i + 2)
-}.join('|')
+csv.each.with_index do |row, i|
+  line = row.zip(widths).map {|cell, width|
+    cell.ljust(width)
+  }.join(' | ')
 
-CSV.read(csv).each.with_index do |line, i|
-  line = line.map.with_index {|str, num|
-    str.ljust max_group[num] + 1
-  }.join('| ')
+  puts "| #{line} |"
 
-  puts "| #{line}|"
-  puts "|#{hyphen}|" if i.zero?
+  if i.zero?
+    delimiter = widths.map {|i|
+      '-' * (i + 2)
+    }.join('|')
+
+    puts "|#{delimiter}|"
+  end
 end
