@@ -14,18 +14,15 @@ def build_env(con)
   if line = con.gets("\r\n")
     method, fullpath, protocol = line.split
     path, query                = fullpath.split('?', 2)
-    server_name = 'localhost'
-    port = '3001'
-    scheme = 'https'
 
     env = {
       'PATH_INFO'       => path,
       'REQUEST_METHOD'  => method,
       'QUERY_STRING'    => query || '',
-      'SERVER_NAME'     => server_name,
+      'SERVER_NAME'     => 'localhost',
       'SERVER_PROTOCOL' => protocol,
-      'SERVER_PORT'     => port,
-      'rack.url_scheme' => scheme,
+      'SERVER_PORT'     => '3001',
+      'rack.url_scheme' => 'https',
       'rack.errors'     => $stderr
     }
 
@@ -43,8 +40,8 @@ def build_env(con)
       end
     end
 
-    if length = env['CONTENT_LENGTH']
-      env['rack.input'] = StringIO.new(con.read(length.to_i))
+    if length = env['CONTENT_LENGTH']&.to_i
+      env['rack.input'] = StringIO.new(con.read(length))
     end
 
     env
@@ -68,6 +65,7 @@ def create_thread(con, app)
       }.join("\n")
 
       res_body = body.join
+
       con.write <<~RESP.chomp.gsub("\n", "\r\n")
         HTTP/1.1 #{status} 
         #{res_headers}
@@ -85,24 +83,25 @@ def create_thread(con, app)
 end
 
 users = {}
+mutex = Thread::Mutex.new
 
 app = Proc.new do |env|
   if env['REQUEST_METHOD'] == 'GET'
     case env['PATH_INFO']
     when '/'
-      [200, { 'content-type' => 'text/html' }, ['<h1>Hello</h1>']]
+      [200, {'content-type' => 'text/html'}, ['<h1>Hello</h1>']]
     when '/users'
-      [200, { 'content-type' => 'text/html' }, [<<~HTML]]
+      [200, {'content-type' => 'text/html'}, [<<~HTML]]
         <ul>
           #{users.values.map { "<li>#{it['name']}</li>" }.join}
         </ul>
       HTML
-    when /\/users\/(\d+)/
+    when %r(\A/users/(\d+)\z)
       id   = Regexp.last_match[1]
       user = users[id.to_i]
 
       if user
-        [200, { 'content-type' => 'text/html' }, [<<~HTML]]
+        [200, {'content-type' => 'text/html'}, [<<~HTML]]
           <dl>
             <dt>ID</dt>
             <dd>#{id}</dd>
@@ -113,19 +112,22 @@ app = Proc.new do |env|
           </dl>
         HTML
       else
-        [404, { 'content-type' => 'text/html' }, ['<h1>Not Found</h1>']]
+        [404, {'content-type' => 'text/html'}, ['<h1>Not Found</h1>']]
       end
     else
-      [404, { 'content-type' => 'text/html' }, ['<h1>Not Found</h1>']]
+      [404, {'content-type' => 'text/html'}, ['<h1>Not Found</h1>']]
     end
   elsif env['REQUEST_METHOD'] == 'POST'
-    req       = Rack::Request.new(env)
-    id        = (users.keys.max || 0) + 1
-    users[id] = req.params
+    req = Rack::Request.new(env)
 
-    [200, { 'content-type' => 'text/html' }, ['<p>登録しました。</p>']]
+    mutex.synchronize do
+      id        = (users.keys.max || 0) + 1
+      users[id] = req.params
+    end
+
+    [200, {'content-type' => 'text/html'}, ['<p>登録しました。</p>']]
   else
-    [405, { 'content-type' => 'text/html' }, ['<h1>Method Not Allowed</h1>']]
+    [405, {'content-type' => 'text/html'}, ['<h1>Method Not Allowed</h1>']]
   end
 end
 
