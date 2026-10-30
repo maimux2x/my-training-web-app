@@ -7,13 +7,11 @@ rule_table = patterns.zip(rule).to_h
 start = '1'
 
 result = (gen - 1).times.map {
-  start = start.center(gen * 2 + 2, '0').each_char.each_cons(3).map {|pattern|
-    rule_table[pattern.join]
-  }.join
+  start = start.center(gen * 2 + 1, '0').each_char.each_cons(3).map { rule_table[it.join] }.join
 }
 
-result.unshift('010').each do |line|
+result.unshift('1'.center(gen * 2)).each do |line|
   line.gsub!('0', ' ')
   line.gsub!('1', '#')
-  puts line.center(result.last.length)
+  puts line
 end
