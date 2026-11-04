@@ -2,52 +2,67 @@
 ## Router の実装
 
 ```ruby
+require 'rack'
+
 class Router
-  def initialize
-    @endpoints = []
-  end
+  class Route
+    def initialize(method, pattern, block)
+      @method      = method
+      @pattern     = pattern
+      @block       = block
+      @path_params = {}
+    end
 
-  def get(pattern, &block)
-    @endpoints << ['GET', pattern, block]
-  end
+    attr_reader :block, :path_params
 
-  def post(pattern, &block)
-    @endpoints << ['POST', pattern, block]
-  end
+    def match?(method, path)
+      path_params.clear
 
-  def call(env)
-    @endpoints.each do |(method, pattern, block)|
-      next unless env['REQUEST_METHOD'] == method
+      return false unless @method == method
 
-      path    = env['PATH_INFO'].split('/')
-      pattern = pattern.split('/')
+      pattern_parts = @pattern.split('/')
+      path_parts    = path.split('/')
 
-      next unless path.size == pattern.size
+      return false unless pattern_parts.size == path_parts.size
 
-      params = {}
-
-      next unless pattern.zip(path).all? {|x, y|
+      pattern_parts.zip(path_parts).all? {|x, y|
         if x.start_with?(':')
-          params[x.delete_prefix(':')] = y
+          path_params[x.delete_prefix(':')] = y
           true
         else
           x == y
         end
       }
+    end
+  end
 
-      return block.call(Request.new(params))
+  def initialize
+    @routes = []
+  end
+
+  def get(pattern, &block)
+    @routes << Route.new('GET', pattern, block)
+  end
+
+  def post(pattern, &block)
+    @routes << Route.new('POST', pattern, block)
+  end
+
+  def call(env)
+    @routes.each do |route|
+      if route.match?(env['REQUEST_METHOD'], env['PATH_INFO'])
+        env['rack.path_params'] = route.path_params
+
+        return route.block.call(MyRequest.new(env))
+      end
     end
 
     [404, {}, ['Not Found']]
   end
 end
 
-class Request
-  def initialize(path_params)
-    @path_params = path_params
-  end
-
-  attr_reader :path_params
+class MyRequest < Rack::Request
+  def path_params = env['rack.path_params']
 end
 ```
 
@@ -165,8 +180,8 @@ end
 
 ### 最初に書いたテストは何を固定したか
 
-エンドポイント、HTTPメソッド、レスポンス
+パス、HTTPメソッド、レスポンス
 
 ### リファクタリングで何を改善したか
 
-Routerクラスをハッシュで初期化していたのを配列に変更した
+@routes をハッシュから配列に変更することでコードをシンプルにした
