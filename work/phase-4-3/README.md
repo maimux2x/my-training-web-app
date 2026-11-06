@@ -137,21 +137,11 @@ class Router
   end
 
   def get(pattern, to: nil, &block)
-    if to.instance_of?(String)
-      klass, action = to.split('#', 2)
-      to            = Class.const_get("#{klass.capitalize}Controller").action(action)
-    end
-
-    @routes << Route.new('GET', pattern, to || block)
+    register_route 'GET', pattern, to, block
   end
 
   def post(pattern, to: nil, &block)
-    if to.instance_of?(String)
-      klass, action = to.split('#', 2)
-      to            = Class.const_get("#{klass.capitalize}Controller").action(action)
-    end
-
-    @routes << Route.new('POST', pattern, to || block)
+    register_route 'POST', pattern, to, block
   end
 
   def call(env)
@@ -164,6 +154,20 @@ class Router
     end
 
     [404, {}, ['Not Found']]
+  end
+
+  private
+
+  def register_route(method, pattern, to, block)
+    to = if to.instance_of?(String)
+      klass, action = to.split('#', 2)
+
+      Class.const_get("#{klass.capitalize}Controller").action(action)
+    else
+      to
+    end
+
+    @routes << Route.new(method, pattern, to || block)
   end
 end
 
