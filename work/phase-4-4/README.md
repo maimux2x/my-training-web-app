@@ -57,6 +57,7 @@ class RenderTest < Minitest::Test
 
   def test_action_can_redirect
     router = Router.new
+
     router.post '/users', to: 'users#create'
 
     status, headers, body = router.call(env_for('/users', method: 'POST'))
@@ -90,6 +91,26 @@ class RenderTest < Minitest::Test
     end
   end
 
+  def test_raises_error_when_nothing_rendered_via_router
+    router = Router.new
+
+    router.get '/empty', to: 'empty#index'
+
+    assert_raises RuntimeError do
+      router.call(env_for('/empty', method: 'GET'))
+    end
+  end
+
+  def test_raises_error_when_render_called_twice_via_router
+    router = Router.new
+
+    router.get '/double_render', to: 'double_render#index'
+
+    assert_raises RuntimeError do
+      router.call(env_for('/double_render', method: 'GET'))
+    end
+  end
+
   private
 
   def env_for(path, method: 'GET')
@@ -110,7 +131,7 @@ require_relative '../../router'
 class ControllerBase
   def self.action(method)
     ->(req) {
-      new(req).send(method)
+      new(req).dispatch(method)
     }
   end
 
@@ -132,13 +153,11 @@ class ControllerBase
   end
 
   def dispatch(action)
-    send(action)
+    public_send(action)
 
-    if @res.nil?
-      raise RuntimeError
-    else
-      @res
-    end
+    raise 'nothing rendered' unless @res
+
+    @res
   end
 
   private
@@ -148,11 +167,9 @@ class ControllerBase
   end
 
   def build_response(status, header, body)
-    if @res.nil?
-      @res = [status, header, body]
-    else
-      raise RuntimeError
-    end
+    raise 'double rendered' if @res
+
+    @res = [status, header, body]
   end
 end
 ```
@@ -190,11 +207,11 @@ require_relative 'controller_base'
 
 class UsersController < ControllerBase
   def index
-    [200, {}, ['Users Index']]
+    render_text 'Users Index'
   end
 
   def show
-    [200, {}, [params['id']]]
+    render_text params['id']
   end
 
   def create
@@ -234,20 +251,19 @@ end
 
 ### render は何を抽象化しているか
 
-HTTP レスポンス
-
+HTTP レスポンスの組み立て
 
 ### redirect は HTTP 的に何をしているか
 
-移動先をlocationヘッダーに保持して、レスポンスを返すこと
+ステータス300系と、移動先のパスをlocationヘッダーとして返すこと
 
 ### Action から Rack 配列を直接返さない利点は何か
 
-Rack 配列は共通の仕様であるため、実装の重複を避けることができる
+分かりません。
 
 ### 何も render しない場合の仕様をどう決めたか
 
-コントローラのアクションは何かしらの戻り値を返すことが期待される振る舞いであるため、例外を発生させるようにした
+例外を発生させることにした
 
 ### テストによって設計がどう変わったか
 
