@@ -55,8 +55,8 @@ class ViewTest < Minitest::Test
   def test_view_can_render_collection_from_instance_variable
     write_view 'users/repeat.erb', <<~ERB
       <ul>
-        <%- @users.each do |user| -%>
-        <li><%= h(user) %></li>
+        <%- @names.each do |name| -%>
+        <li><%= h(name) %></li>
         <%- end -%>
       </ul>
     ERB
@@ -109,9 +109,10 @@ end
 ```ruby
 require_relative '../../router'
 require 'erb'
-include ERB::Util
 
 class ControllerBase
+  include ERB::Util
+
   def self.action(method)
     ->(req) {
       new(req).dispatch(method)
@@ -136,7 +137,7 @@ class ControllerBase
   end
 
   def render_view(view)
-    render_html ERB.new(File.read("views/#{view}.erb"), trim_mode: '-').result binding
+    render_html ERB.new(File.read("views/#{view}.erb"), trim_mode: '-').result(binding)
   end
 
   def redirect_to(path, status: 302)
@@ -144,7 +145,7 @@ class ControllerBase
   end
 
   def dispatch(action)
-    public_send(action)
+    public_send action
 
     raise 'nothing rendered' unless @res
 
@@ -163,7 +164,6 @@ class ControllerBase
     @res = [status, header, body]
   end
 end
-
 ```
 
 ### サンプルコントローラ
@@ -194,7 +194,7 @@ class UsersController < ControllerBase
   end
 
   def repeat
-    @users = ['Alice', 'Bob']
+    @names = ['Alice', 'Bob']
 
     render_view 'users/repeat'
   end
@@ -207,7 +207,7 @@ require_relative 'controller_base'
 
 class BooksController < ControllerBase
   def index
-    render_view 'users/missing'
+    render_view 'books/missing'
   end
 
   def show
@@ -229,8 +229,8 @@ end
 
 ```
 <ul>
-  <%- @users.each do |user| -%>
-  <li><%= h(user) %></li>
+  <%- @names.each do |name| -%>
+  <li><%= h(name) %></li>
   <%- end -%>
 </ul>
 ```
@@ -257,15 +257,15 @@ end
 
 ### なぜ HTML を Controller に直接書かない方がよいのか
 
-Rubyコードの中にHTMLが混ざって、可読性が悪い。且つ、HTMLの量が増えてくると修正もやりにくくなる。
+Rubyコードの中にHTMLが混ざって、可読性が悪い。かつ、HTMLの量が増えてくると修正もやりにくくなる。
 
 ### なぜ View から Controller のインスタンス変数を参照できるのか
 
-binding によってコントローラのコンテキストで処理されるため。
+binding によってERBテンプレートがコントローラのコンテキストで処理されるため。
 
 ### render_view は何を抽象化しているか
 
-パスに基づき、ERBファイルの内容をHTMLへ変換すること。
+指定されたパスのファイルをERBテンプレートとして評価し、HTMLに変換した結果を返すこと
 
 ### テンプレートが存在しない場合の仕様をどう決めたか
 
@@ -273,4 +273,4 @@ binding によってコントローラのコンテキストで処理されるた
 
 ### layout が欲しくなる理由は何か
 
-ヘッダーやフッターなど各ビューごとに共通しているレイアウトは1箇所にまとめて明記して、個々のビューで参照して使い回せたほうが重複がなくなる。
+ヘッダーやフッターなどビューごとに共通しているHTMLを1箇所にまとめて書くことで、個々のビューで繰り返し書かなくて良くなるため
