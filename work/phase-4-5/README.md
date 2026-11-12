@@ -12,6 +12,12 @@ require_relative '../app/controllers/books_controller'
 require 'erb'
 
 class ViewTest < Minitest::Test
+  def setup
+    tree('views').each do |file|
+      File.delete file
+    end
+  end
+
   def test_action_can_render_html_file
     write_view 'pages/home.html', '<h1>Home</h1>'
 
@@ -99,6 +105,14 @@ class ViewTest < Minitest::Test
   def write_view(path, html)
     File.write("views/#{path}", html)
   end
+
+  def tree(path)
+    return path if File.file?(path)
+
+    Dir.children(path).flat_map do |child|
+      tree File.join(path, child)
+    end
+  end
 end
 ```
 
@@ -133,11 +147,11 @@ class ControllerBase
   end
 
   def render_file(path)
-    render_html File.read("views/#{path}")
+    render_html read_view_file(path)
   end
 
-  def render_view(view)
-    render_html ERB.new(File.read("views/#{view}.erb"), trim_mode: '-').result(binding)
+  def render_view(path)
+    render_html ERB.new(read_view_file("#{path}.erb"), trim_mode: '-').result(binding)
   end
 
   def redirect_to(path, status: 302)
@@ -162,6 +176,10 @@ class ControllerBase
     raise 'double rendered' if @res
 
     @res = [status, header, body]
+  end
+
+  def read_view_file(path)
+    File.read(File.join('views', path))
   end
 end
 ```
