@@ -10,12 +10,11 @@ require_relative '../app/controllers/users_controller'
 require_relative '../app/controllers/books_controller'
 
 require 'erb'
+require 'fileutils'
 
 class ViewTest < Minitest::Test
   def setup
-    tree('views').each do |file|
-      File.delete file
-    end
+    FileUtils.rm_rf 'app/views'
   end
 
   def test_action_can_render_html_file
@@ -103,15 +102,10 @@ class ViewTest < Minitest::Test
   end
 
   def write_view(path, html)
-    File.write("views/#{path}", html)
-  end
+    path = File.join('app/views', path)
 
-  def tree(path)
-    return path if File.file?(path)
-
-    Dir.children(path).flat_map do |child|
-      tree File.join(path, child)
-    end
+    FileUtils.mkdir_p File.dirname(path)
+    File.write path, html
   end
 end
 ```
@@ -179,7 +173,7 @@ class ControllerBase
   end
 
   def read_view_file(path)
-    File.read(File.join('views', path))
+    File.read(File.join('app/views', path))
   end
 end
 ```
