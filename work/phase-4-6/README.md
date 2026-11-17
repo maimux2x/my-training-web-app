@@ -79,6 +79,183 @@ class RequestParamsTest < Minitest::Test
     assert_equal ['Alice'], body
   end
 
+  def test_path_and_form_query_keys_conflict
+    router = Router.new
+
+    router.post '/pages/:name', to: 'pages#create'
+
+    env = env_for('/pages/bob', method: 'POST', params: { 'name' => 'Alice' })
+
+    status, _, body = router.call(env)
+
+    assert_equal 200,       status
+    assert_equal ['Alice'], body
+  end
+
+  def test_all_query_keys_conflict
+    router = Router.new
+
+    router.post '/pages/:name', to: 'pages#create'
+
+    env = env_for('/pages/bob?name=lisa', method: 'POST', params: { 'name' => 'Alice' })
+
+    status, _, body = router.call(env)
+
+    assert_equal 200,       status
+    assert_equal ['Alice'], body
+  end
+
+  def test_request_exposes_path_and_method
+    router = Router.new
+
+    router.post '/inspect', to: 'pages#inspect'
+
+    status, _, body = router.call(env_for('/inspect', method: 'POST'))
+
+    assert_equal 200,               status
+    assert_equal ['/inspect|POST'], body
+  end
+
+  def test_return_nil_when_key_does_not_exist
+    router = Router.new
+
+    router.get '/pages/:id', to: 'pages#show'
+
+    status, _, body = router.call(env_for('/pages/42'))
+
+    assert_equal 200,             status
+    assert_equal ['id=42,page='], body
+  end
+
+  def test_params_are_accessed_with_string_keys
+    router = Router.new
+
+    router.get '/search', to: 'users#search'
+
+    _, _, body = router.call(env_for('/search?keyword=ruby'))
+
+    assert_equal ['ruby|'], body
+  end
+
+  private
+
+  def env_for(path, method: 'GET', params: {})
+    path, query = path.split('?')
+
+    body = params.map {|k, v|
+      "#{CGI.escape(k)}=#{CGI.escape(v)}"
+    }.join('&')
+
+    {
+      'PATH_INFO'      => path,
+      'REQUEST_METHOD' => method,
+      'QUERY_STRING'   => query,
+      'rack.input'     => StringIO.new(body)
+    }
+  end
+end
+require_relative 'test_helper'
+require_relative '../router'
+require_relative '../app/controllers/pages_controller'
+require_relative '../app/controllers/users_controller'
+
+require 'cgi'
+
+class RequestParamsTest < Minitest::Test
+  def test_controller_can_access_request
+    router = Router.new
+
+    router.get '/info', to: 'pages#info'
+
+    status, _, body = router.call(env_for('/info'))
+
+    assert_equal 200,     status
+    assert_equal ['GET'], body
+  end
+
+  def test_controller_can_access_query_params
+    router = Router.new
+
+    router.get '/search', to: 'pages#search'
+
+    status, _, body = router.call(env_for('/search?keyword=ruby'))
+
+    assert_equal 200,      status
+    assert_equal ['ruby'], body
+  end
+
+  def test_controller_can_access_path_params_from_params
+    router = Router.new
+
+    router.get '/users/:id', to: 'users#show'
+
+    status, _, body = router.call(env_for('/users/42'))
+
+    assert_equal 200,    status
+    assert_equal ['42'], body
+  end
+
+  def test_params_contain_both_path_and_query_params
+    router = Router.new
+
+    router.get '/pages/:id', to: 'pages#show'
+
+    status, _, body = router.call(env_for('/pages/42?page=3'))
+
+    assert_equal 200,              status
+    assert_equal ['id=42,page=3'], body
+  end
+
+  def test_path_and_query_keys_conflict
+    router = Router.new
+
+    router.get '/pages/:id', to: 'pages#conflict'
+
+    status, _, body = router.call(env_for('/pages/42?id=3'))
+
+    assert_equal 200,       status
+    assert_equal ['id=42'], body
+  end
+
+  def test_controller_can_access_form_params
+    router = Router.new
+
+    router.post '/pages', to: 'pages#create'
+
+    env = env_for('/pages', method: 'POST', params: { 'name' => 'Alice' })
+
+    status, _, body = router.call(env)
+
+    assert_equal 200,       status
+    assert_equal ['Alice'], body
+  end
+
+  def test_path_and_form_query_keys_conflict
+    router = Router.new
+
+    router.post '/pages/:name', to: 'pages#create'
+
+    env = env_for('/pages/bob', method: 'POST', params: { 'name' => 'Alice' })
+
+    status, _, body = router.call(env)
+
+    assert_equal 200,       status
+    assert_equal ['Alice'], body
+  end
+
+  def test_all_query_keys_conflict
+    router = Router.new
+
+    router.post '/pages/:name', to: 'pages#create'
+
+    env = env_for('/pages/bob?name=lisa', method: 'POST', params: { 'name' => 'Alice' })
+
+    status, _, body = router.call(env)
+
+    assert_equal 200,       status
+    assert_equal ['Alice'], body
+  end
+
   def test_request_exposes_path_and_method
     router = Router.new
 
@@ -168,10 +345,7 @@ class ControllerBase
   def render_view(path)
     context = ViewContext.new
 
-    instance_variables.each do |name|
-      next if name == :@request
-      next if name == :@res
-
+    (instance_variables - %i[@request @res]).each do |name|
       context.instance_variable_set name, instance_variable_get(name)
     end
 
@@ -193,7 +367,9 @@ class ControllerBase
   private
 
   def params
-    @request.params.merge(@request.path_params)
+    @request.params.merge(@request.path_params) {|k, param_v, path_param_v|
+      @request.post? ? param_v : path_param_v
+    }
   end
 
   def build_response(status, header, body)
@@ -230,7 +406,7 @@ class Router
       @path_params  = {}
     end
 
-    attr_reader :block, :path_params, :query_params, :form_params
+    attr_reader :block, :path_params
 
     def match?(method, path)
       path_params.clear
@@ -396,22 +572,21 @@ end
 
 ### request と params は何が違うか
 
-request はリクエストそのもので、params はデータを識別するための値、リクエストのうち入力として受け付けたもの
-
+request はリクエストそのもので、params はリクエストのうち入力として受け付けたもの
 
 ### なぜ query / path / form を params にまとめたのか
 
-一つのメソッドを介したほうが扱いやすいから
+扱いやすいから
 
 ### parameter の優先順位をどう決めたか
 
-パスパラメータを最優先とする
-パスパラメータがクエリパラメータやフォームパラメータと同じキーで重複していた際にパスパラメータ以外のパラメータのキーを優先するとURLの意味が変わってしまうため
-
+リクエストメソッドで決めた
+GET の場合はパスパラメータを最優先とする
+POST の場合はフォームパラメータを優先する
 
 ### いま独自 Request クラスを本格導入しない理由
 
-導入しているため分かりません。
+分かりません。
 
 ### テストによって設計がどう変わったか
 
