@@ -16,8 +16,8 @@ class CallbackTest < Minitest::Test
   def teardown
     # TODO: コールバックをテストする際は、テスト用に使い捨てのコントローラを定義する
 
-    AuthorsController.clear_blocks
-    PublishersController.clear_blocks
+    AuthorsController.clear_callbacks
+    PublishersController.clear_callbacks
   end
 
   def test_before_action_runs_before_action_method
@@ -193,22 +193,22 @@ class ControllerBase
     }
   end
 
-  def self.before_action(method = nil, only: [], except: [], &block)
-    blocks << [method, only, except, block]
-  end
-
-  def self.blocks
-    @blocks ||= []
-  end
-
-  def self.clear_blocks
-    @blocks = []
+  def self.before_action(method = nil, only: nil, except: [], &block)
+    callbacks << [method, only, except, block]
   end
 
   def self.callbacks
+    @callbacks ||= []
+  end
+
+  def self.clear_callbacks
+    callbacks.clear
+  end
+
+  def self.all_callbacks
     ancestors.select {|klass|
-      klass.instance_variable_defined?(:@blocks)
-    }.reverse.flat_map(&:blocks)
+      klass.respond_to?(:callbacks)
+    }.reverse.flat_map(&:callbacks)
   end
 
   def initialize(req)
@@ -245,16 +245,19 @@ class ControllerBase
   end
 
   def dispatch(action)
-    self.class.callbacks.each do |(method, only, except, block)|
+    self.class.all_callbacks.each do |(method, only, except, block)|
       break if @res
       next if except.include?(action)
+      next unless only.nil? || only.include?(action)
 
-      if only.empty? || only.include?(action)
-        method ? send(method) : instance_exec(&block)
+      if method
+        send method
+      else
+        instance_exec(&block)
       end
     end
 
-    public_send(action) unless @res
+    public_send action unless @res
 
     raise 'nothing rendered' unless @res
 
@@ -299,9 +302,9 @@ end
 
 ### Middlewareとの違い
 
-Rackミドルウェアはリクエストがメインのアプリに到達する前後に処理を実行できる
-コールバックはアプリのコントローラでアクションが実行される前後（※この課題では前のみ実装）に処理を実行できる
+Rackミドルウェアはリクエストがメインのアプリに到達する前後に処理を実行できる。
+コールバックはアプリのコントローラでアクションが実行される前後（※この課題では前のみ実装）に処理を実行できる。
 
 ### 処理の流れはどう設計したか
 
-テストで期待する振る舞いを決めながら考えた。
+テストで期待する振る舞いを決めながら、実装で詰まった部分の課題の分解や考慮漏れがないかを Claude Code に相談しながら進めた。
