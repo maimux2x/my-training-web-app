@@ -197,7 +197,21 @@ class ControllerBase
         true
       end
     end
+
+    def call(controller)
+      if method
+        controller.__send__ method
+      else
+        controller.instance_exec(&block)
+      end
+    end
   }
+
+  @callbacks = []
+
+  def self.inherited(subclass)
+    subclass.instance_variable_set :@callbacks, []
+  end
 
   def self.action(method)
     ->(req) {
@@ -206,12 +220,12 @@ class ControllerBase
   end
 
   def self.before_action(method = nil, only: nil, except: nil, &block)
-    (@callbacks ||= []) << Callback.new(method, only, except, block)
+    @callbacks << Callback.new(method, only, except, block)
   end
 
   def self.callbacks
-    if superclass.instance_variable_defined?(:@callbacks)
-      @callbacks.concat(superclass.instance_variable_get(:@callbacks)).reverse
+    if superclass.respond_to?(:callbacks)
+      superclass.callbacks + @callbacks
     else
       @callbacks
     end
@@ -227,6 +241,20 @@ class ControllerBase
   end
 
   attr_reader :request
+
+  def dispatch(action)
+    self.class.callbacks.select { it.match?(action) }.each do |callback|
+      callback.call self
+
+      break if @res
+    end
+
+    public_send action unless @res
+
+    raise 'nothing rendered' unless @res
+
+    @res
+  end
 
   def render_text(text, status: 200)
     build_response status, {'content-type' => 'text/plain'}, [text]
@@ -252,25 +280,6 @@ class ControllerBase
 
   def redirect_to(path, status: 302)
     build_response status, {'location' => path}, []
-  end
-
-  def dispatch(action)
-    self.class.callbacks&.each do |callback|
-      next if @res
-      next unless callback.match? action
-
-      if callback.method
-        __send__ callback.method
-      else
-        instance_exec(&callback.block)
-      end
-    end
-
-    public_send action unless @res
-
-    raise 'nothing rendered' unless @res
-
-    @res
   end
 
   private
