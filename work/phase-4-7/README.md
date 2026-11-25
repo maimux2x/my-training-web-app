@@ -187,28 +187,38 @@ require_relative '../../router'
 require 'erb'
 
 class ControllerBase
+  Callback = Data.define(:method, :only, :except, :block) {
+    def match?(action)
+      if only
+        only.include?(action)
+      elsif except
+        !except.include?(action)
+      else
+        true
+      end
+    end
+  }
+
   def self.action(method)
     ->(req) {
       new(req).dispatch(method)
     }
   end
 
-  def self.before_action(method = nil, only: nil, except: [], &block)
-    callbacks << [method, only, except, block]
+  def self.before_action(method = nil, only: nil, except: nil, &block)
+    (@callbacks ||= []) << Callback.new(method, only, except, block)
   end
 
   def self.callbacks
-    @callbacks ||= []
+    if superclass.instance_variable_defined?(:@callbacks)
+      @callbacks.concat(superclass.instance_variable_get(:@callbacks)).reverse
+    else
+      @callbacks
+    end
   end
 
   def self.clear_callbacks
-    callbacks.clear
-  end
-
-  def self.all_callbacks
-    ancestors.select {|klass|
-      klass.respond_to?(:callbacks)
-    }.reverse.flat_map(&:callbacks)
+    @callbacks&.clear
   end
 
   def initialize(req)
@@ -245,15 +255,14 @@ class ControllerBase
   end
 
   def dispatch(action)
-    self.class.all_callbacks.each do |(method, only, except, block)|
-      break if @res
-      next if except.include?(action)
-      next unless only.nil? || only.include?(action)
+    self.class.callbacks&.each do |callback|
+      next if @res
+      next unless callback.match? action
 
-      if method
-        send method
+      if callback.method
+        __send__ callback.method
       else
-        instance_exec(&block)
+        instance_exec(&callback.block)
       end
     end
 
