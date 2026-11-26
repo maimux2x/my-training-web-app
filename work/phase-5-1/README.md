@@ -159,3 +159,18 @@ Expected: 404
 3 runs, 11 assertions, 1 failures, 0 errors, 0 skips
 ```
 
+## STEP6
+
+```ruby
+# UsersController
+
+  def show
+    row = db.get_first_row('SELECT id, name, email FROM users WHERE id = ?', params['id'])
+
+    if row
+      render_text row.join(',')
+    else
+      render_text '', status: 404
+    end
+  end
+```
