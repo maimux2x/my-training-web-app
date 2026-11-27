@@ -527,10 +527,9 @@ require_relative '../app/controllers/5_1_users_controller'
 
 class SqlTest < Minitest::Test
   def setup
-    @db = SQLite3::Database.new('db/development.sqlite3')
-    @db.execute 'DROP TABLE IF EXISTS users'
+    $db.execute 'DROP TABLE IF EXISTS users'
 
-    @db.execute <<~SQL
+    $db.execute <<~SQL
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
@@ -549,8 +548,8 @@ class SqlTest < Minitest::Test
         <tbody>
           <% @rows.each do |row| %>
             <tr>
-              <td><%= row[:id] %></td>
-              <td><%= row[:name] %></td>
+              <td><%= row['id'] %></td>
+              <td><%= row['name'] %></td>
             </tr>
           <% end %>
         </tbody>
@@ -560,13 +559,13 @@ class SqlTest < Minitest::Test
     write_view '5_1_users/show.erb', <<~ERB
       <dl>
         <dt>id</dt>
-        <dd><%= @row[:id] %></dd>
+        <dd><%= @row['id'] %></dd>
 
         <dt>名前</dt>
-        <dd><%= @row[:name] %></dd>
+        <dd><%= @row['name'] %></dd>
 
         <dt>メール</dt>
-        <dd><%= @row[:email] %></dd>
+        <dd><%= @row['email'] %></dd>
       </dl>
     ERB
   end
@@ -670,7 +669,7 @@ class SqlTest < Minitest::Test
 
   def seed_users(users)
     users.each do |user|
-      @db.execute <<~SQL, user.values_at(:id, :name, :email)
+      $db.execute <<~SQL, user.values_at(:id, :name, :email)
         INSERT INTO users (id, name, email)
         VALUES (?, ?, ?)
       SQL
@@ -688,19 +687,13 @@ require_relative 'controller_base'
 
 class UsersController < ControllerBase
   def index
-    rows = db.execute('SELECT id, name FROM users')
-
-    @rows = rows.map {|row|
-      array_to_hash(%i[id name], row)
-    }
+    @rows = $db.execute('SELECT id, name FROM users')
 
     render_view '5_1_users/index'
   end
 
   def show
-    if row = db.get_first_row('SELECT id, name, email FROM users WHERE id = ?', params['id'])
-      @row = array_to_hash(%i[id name email], row)
-
+    if @row = $db.get_first_row('SELECT id, name, email FROM users WHERE id = ?', params['id'])
       render_view '5_1_users/show'
     else
       render_text '', status: 404
@@ -708,11 +701,30 @@ class UsersController < ControllerBase
   end
 
   def search
-    rows = db.execute('SELECT id, name FROM users WHERE name = ?', params['name'])
+    @rows = $db.execute('SELECT id, name FROM users WHERE name = ?', params['name'])
 
-    @rows = rows.map {|row|
-      array_to_hash(%i[id name], row)
-    }
+    render_view '5_1_users/index'
+  end
+end
+require_relative 'controller_base'
+
+class UsersController < ControllerBase
+  def index
+    @rows = $db.execute('SELECT id, name FROM users')
+
+    render_view '5_1_users/index'
+  end
+
+  def show
+    if @row = $db.get_first_row('SELECT id, name, email FROM users WHERE id = ?', params['id'])
+      render_view '5_1_users/show'
+    else
+      render_text '', status: 404
+    end
+  end
+
+  def search
+    @rows = $db.execute('SELECT id, name FROM users WHERE name = ?', params['name'])
 
     render_view '5_1_users/index'
   end
@@ -765,136 +777,8 @@ require_relative '../../router'
 require 'erb'
 require 'sqlite3'
 
-class ControllerBase
-  Callback = Data.define(:method, :only, :except, :block) {
-    def match?(action)
-      if only
-        only.include?(action)
-      elsif except
-        !except.include?(action)
-      else
-        true
-      end
-    end
-
-    def call(controller)
-      if method
-        controller.__send__ method
-      else
-        controller.instance_exec(&block)
-      end
-    end
-  }
-
-  @callbacks = []
-
-  def self.inherited(subclass)
-    subclass.instance_variable_set :@callbacks, []
-  end
-
-  def self.action(method)
-    ->(req) {
-      new(req).dispatch(method)
-    }
-  end
-
-  def self.before_action(method = nil, only: nil, except: nil, &block)
-    @callbacks << Callback.new(method, only, except, block)
-  end
-
-  def self.callbacks
-    if superclass.respond_to?(:callbacks)
-      superclass.callbacks + @callbacks
-    else
-      @callbacks
-    end
-  end
-
-  def self.clear_callbacks
-    @callbacks&.clear
-  end
-
-  def initialize(req)
-    @request = req
-    @res     = nil
-  end
-
-  attr_reader :request
-
-  def db = @db ||= SQLite3::Database.new('db/development.sqlite3')
-
-  def dispatch(action)
-    self.class.callbacks.select { it.match?(action) }.each do |callback|
-      callback.call self
-
-      break if @res
-    end
-
-    public_send action unless @res
-
-    raise 'nothing rendered' unless @res
-
-    @res
-  end
-
-  def render_text(text, status: 200)
-    build_response status, {'content-type' => 'text/plain'}, [text]
-  end
-
-  def render_html(html, status: 200)
-    build_response status, {'content-type' => 'text/html'}, [html]
-  end
-
-  def render_file(path)
-    render_html read_view_file(path)
-  end
-
-  def render_view(path)
-    context = ViewContext.new
-
-    (instance_variables - %i[@request @res]).each do |name|
-      context.instance_variable_set name, instance_variable_get(name)
-    end
-
-    render_html ERB.new(read_view_file("#{path}.erb"), trim_mode: '-').result(context._binding)
-  end
-
-  def redirect_to(path, status: 302)
-    build_response status, {'location' => path}, []
-  end
-
-  private
-
-  def params
-    @request.params.merge(@request.path_params)
-  end
-
-  def build_response(status, header, body)
-    raise 'double rendered' if @res
-
-    @res = [status, header, body]
-  end
-
-  def read_view_file(path)
-    File.read(File.join('app/views', path))
-  end
-
-  def array_to_hash(arr, row)
-    arr.zip(row).to_h
-  end
-end
-
-class ViewContext
-  include ERB::Util
-
-  def _binding
-    binding
-  end
-end
-require_relative '../../router'
-
-require 'erb'
-require 'sqlite3'
+$db                 = SQLite3::Database.new('db/development.sqlite3')
+$db.results_as_hash = true
 
 class ControllerBase
   Callback = Data.define(:method, :only, :except, :block) {
@@ -952,8 +836,6 @@ class ControllerBase
 
   attr_reader :request
 
-  def db = @db ||= SQLite3::Database.new('db/development.sqlite3')
-
   def dispatch(action)
     self.class.callbacks.select { it.match?(action) }.each do |callback|
       callback.call self
@@ -1008,10 +890,6 @@ class ControllerBase
 
   def read_view_file(path)
     File.read(File.join('app/views', path))
-  end
-
-  def array_to_hash(arr, row)
-    arr.zip(row).to_h
   end
 end
 
