@@ -528,10 +528,11 @@ require_relative '../app/controllers/5_1_users_controller'
 class SqlTest < Minitest::Test
   def setup
     @db = SQLite3::Database.new('db/development.sqlite3')
+    @db.execute 'DROP TABLE IF EXISTS users'
 
     @db.execute <<~SQL
       CREATE TABLE users (
-        id INTEGER,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         email TEXT
       );
@@ -568,10 +569,6 @@ class SqlTest < Minitest::Test
         <dd><%= @row[:email] %></dd>
       </dl>
     ERB
-  end
-
-  def teardown
-    @db.execute 'DROP TABLE users'
   end
 
   def test_users_index_displays_all_users
@@ -673,7 +670,7 @@ class SqlTest < Minitest::Test
 
   def seed_users(users)
     users.each do |user|
-      @db.execute <<~SQL, [user[:id], user[:name], user[:email]]
+      @db.execute <<~SQL, user.values_at(:id, :name, :email)
         INSERT INTO users (id, name, email)
         VALUES (?, ?, ?)
       SQL
@@ -701,9 +698,7 @@ class UsersController < ControllerBase
   end
 
   def show
-    row = db.get_first_row('SELECT id, name, email FROM users WHERE id = ?', params['id'])
-
-    if row
+    if row = db.get_first_row('SELECT id, name, email FROM users WHERE id = ?', params['id'])
       @row = array_to_hash(%i[id name email], row)
 
       render_view '5_1_users/show'
